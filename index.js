@@ -1,4 +1,4 @@
-var compiler = require('ember-template-compiler');
+var compiler;
 var through = require('through2');
 var gutil = require('gulp-util');
 var merge = require('merge');
