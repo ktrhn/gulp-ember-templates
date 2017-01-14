@@ -8,147 +8,147 @@ var async = require('async');
 const PLUGIN_NAME = 'gulp-ember-templates';
 
 var defaultOptions = {
-  type: 'browser',
-  moduleName: 'templates',
-  compiler: null,
-  precompile: true,
-  isHTMLBars: false
+    type: 'browser',
+    moduleName: 'templates',
+    compiler: null,
+    precompile: true,
+    isHTMLBars: false
 };
 
 var formats = {
-  browser: function (compilerOutput, fileName, options) {
-    var engine = !!options.isHTMLBars ? 'HTMLBars' : 'Handlebars';
-    var funct = options.precompile ? 'template' : 'compile';
-    var prefix = 'Ember.TEMPLATES["' + fileName + '"] = Ember.' + engine + '.' + funct + '(';
-    var suffix = ');';
+    browser: function (compilerOutput, fileName, options) {
+        var engine = !!options.isHTMLBars ? 'HTMLBars' : 'Handlebars';
+        var funct = options.precompile ? 'template' : 'compile';
+        var prefix = 'Ember.TEMPLATES["' + fileName + '"] = Ember.' + engine + '.' + funct + '(';
+        var suffix = ');';
 
-    return prefix + compilerOutput.toString() + suffix;
-  },
-  amd: function (compilerOutput, fileName, options) {
-    var moduleName = '';
+        return prefix + compilerOutput.toString() + suffix;
+    },
+    amd: function (compilerOutput, fileName, options) {
+        var moduleName = '';
 
-    if (options.moduleName) {
-      moduleName = options.moduleName;
+        if (options.moduleName) {
+            moduleName = options.moduleName;
 
-      if (moduleName[moduleName.length - 1] !== '/') {
-        moduleName += '/';
-      }
+            if (moduleName[moduleName.length - 1] !== '/') {
+                moduleName += '/';
+            }
+        }
+
+        var prefix = 'define(["ember"], function (Ember) {\n';
+        var suffix = ' });';
+
+        var compilerOutput = formats.browser(compilerOutput, moduleName + fileName, options);
+
+        return prefix + compilerOutput.toString() + suffix;
+    },
+    cjs: function (compilerOutput, fileName, options) {
+        var prefix = 'module.exports = ';
+
+        var compilerOutput = formats.browser(compilerOutput, fileName, options);
+
+        return prefix + compilerOutput.toString();
+    },
+    es6: function (compilerOutput, fileName, options) {
+        var prefix = 'export default function () { return ';
+        var suffix = ' };'
+
+        var compilerOutput = formats.browser(compilerOutput, fileName, options);
+
+        return prefix + compilerOutput.toString() + suffix;
     }
-
-    var prefix = 'define(["ember"], function (Ember) {\n';
-    var suffix = ' });';
-
-    var compilerOutput = formats.browser(compilerOutput, moduleName + fileName, options);
-
-    return prefix + compilerOutput.toString() + suffix;
-  },
-  cjs: function (compilerOutput, fileName, options) {
-    var prefix = 'module.exports = ';
-
-    var compilerOutput = formats.browser(compilerOutput, fileName, options);
-
-    return prefix + compilerOutput.toString();
-  },
-  es6: function (compilerOutput, fileName, options) {
-    var prefix = 'export default function () { return ';
-    var suffix = ' };'
-
-    var compilerOutput = formats.browser(compilerOutput, fileName, options);
-
-    return prefix + compilerOutput.toString() + suffix;
-  }
 };
 
 function transformName (name, options, done) {
-  var transformedName = name.indexOf('component/') === 0 
+    var transformedName = name.indexOf('component/') === 0
     ? name
     : name.split('/').slice(-1)[0].toString();
-  
-  if (options.name) {
-    switch (typeof options.name)
-    {
-      case 'string':
-        transformedName = options.name;
-        break;
 
-      case 'object':
-        transformedName = name.replace(options.name.replace, options.name.with);
-        break;
+    if (options.name) {
+        switch (typeof options.name)
+        {
+            case 'string':
+            transformedName = options.name;
+            break;
 
-      case 'function':
-        options.name(name, function (err, newName) {
-           if (err) return done(err);
+            case 'object':
+            transformedName = name.replace(options.name.replace, options.name.with);
+            break;
 
-           transformedName = newName;
-        });
-        break;
+            case 'function':
+            options.name(name, function (err, newName) {
+                if (err) return done(err);
+
+                transformedName = newName;
+            });
+            break;
+        }
     }
-  }
 
-  done(null, transformedName);
+    done(null, transformedName);
 }
 
 function compileTemplate (fileContents, options, done) {
     var compilerOutput;
 
     try {
-      if (options.precompile) {
-        compilerOutput = compiler.precompile(fileContents, false);
-      } else {
-        compilerOutput = JSON.stringify(fileContents);
-      }
+        if (options.precompile) {
+            compilerOutput = compiler.precompile(fileContents, false);
+        } else {
+            compilerOutput = JSON.stringify(fileContents);
+        }
     }
     catch (e) {
-      return done(e);
+        return done(e);
     }
 
     done(null, compilerOutput);
 }
 
 function compile(options) {
-  options = merge(true, defaultOptions, options);
+    options = merge(true, defaultOptions, options);
 
-  // Use any user-supplied compiler
-  if (options.compiler) {
-    compiler = options.compiler;
-  }
-
-  var stream = through.obj(function (file, enc, cb) {
-    if (file.isNull()) {
-      return cb();
+    // Use any user-supplied compiler
+    if (options.compiler) {
+        compiler = options.compiler;
     }
 
-    if (file.isStream()) {
-      return cb(new Error(PLUGIN_NAME + ': streaming is not supported'));
-    }
-
-    var ext = path.extname(file.relative);
-    var fileName = file.relative.slice(0, -ext.length);
-    var self = this;
-
-    async.series([
-      function (done) {
-        transformName(fileName, options, done);
-      },
-      function (done) {
-        compileTemplate(file.contents.toString(), options, done);
-      }],
-      function (err, results) {
-        if (err) {
-          return cb(err);
+    var stream = through.obj(function (file, enc, cb) {
+        if (file.isNull()) {
+            return cb();
         }
 
-        if (file.isBuffer()) {
-          file.contents = new Buffer(formats[options.type](results[1], results[0], options));
+        if (file.isStream()) {
+            return cb(new Error(PLUGIN_NAME + ': streaming is not supported'));
         }
 
-        self.push(file);
-        return cb();
-      }
-    );
-  });
+        var ext = path.extname(file.relative);
+        var fileName = file.relative.slice(0, -ext.length);
+        var self = this;
 
-  return stream;
+        async.series([
+            function (done) {
+                transformName(fileName, options, done);
+            },
+            function (done) {
+                compileTemplate(file.contents.toString(), options, done);
+            }],
+            function (err, results) {
+                if (err) {
+                    return cb('\nFile: ' + results[0] + '\n' + err);
+                }
+
+                if (file.isBuffer()) {
+                    file.contents = new Buffer(formats[options.type](results[1], results[0], options));
+                }
+
+                self.push(file);
+                return cb();
+            }
+        );
+    });
+
+    return stream;
 }
 
 module.exports = compile;
